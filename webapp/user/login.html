@@ -91,10 +91,31 @@
         </div>
     </div>
 </div>
+<script src="../js/jquery-2.2.0.min.js"></script>
 
+<script>
+$('form').submit(function(){
+    $.ajax({
+      url: '/user/login',
+      type: 'POST',
+      data : $('form').serialize(),
+      statusCode: {
+   	    200: function() {
+   	    	console.log('login success.');
+   	    	window.location = 'http://localhost:8080';
+   	    }, 
+   	 	401: function() {
+   	 		console.log('login failed.');
+   	 		window.location = 'http://localhost:8080/user/login_failed.html'; 
+   	 	}
+      }
+    });
+    return false;
+});
+</script>
 <!-- script references -->
 <script src="../js/jquery-2.2.0.min.js"></script>
 <script src="../js/bootstrap.min.js"></script>
 <script src="../js/scripts.js"></script>
-	</body>
+</body>
 </html>
