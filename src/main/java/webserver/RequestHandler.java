@@ -10,6 +10,7 @@ import java.io.OutputStream;
 import java.net.Socket;
 import java.net.URLDecoder;
 import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
@@ -20,23 +21,26 @@ import org.slf4j.LoggerFactory;
 import db.DataBase;
 import model.User;
 import util.HttpRequestUtils;
-import util.HttpRequestUtils.Pair;
 import util.HttpRequestUtils.Uri;
+import util.Pair;
 
 public class RequestHandler extends Thread {
     private static final Logger log = LoggerFactory.getLogger(RequestHandler.class);
     
     private HashMap<String, String> requestHeaderMap;
     private Socket connection;
+    private int statusCode;
     
     private enum LOGIN {
     	INIT, SUCCESS, FAIL, LOGINED
     }
-    private int loginState = LOGIN.INIT.ordinal();
+    private LOGIN loginState = LOGIN.INIT;
+    private Collection<Pair> responseHeaderProperty;
     
-    public RequestHandler(Socket connectionSocket) {
+    public RequestHandler (Socket connectionSocket) {
         this.connection = connectionSocket;
         this.requestHeaderMap = new HashMap<String, String>();
+        this.responseHeaderProperty = new ArrayList<Pair>();
     }
     
     private String[] parseUserParams(BufferedReader reader) {
@@ -65,12 +69,16 @@ public class RequestHandler extends Thread {
 			requestHeaderMap.put("Uri", uri.getUri());
 			requestHeaderMap.put("Protocol", uri.getProtocol());
     		
+			log.debug("line = " + line);
+			
 			while(!"".equals((line = reader.readLine()))){
+				log.debug("line = " + line);
 				Pair pair = HttpRequestUtils.parseHeader(line);
 				if (pair != null) {
 					requestHeaderMap.put(pair.getKey(), pair.getValue());
 				}
 			}
+			
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
@@ -79,43 +87,32 @@ public class RequestHandler extends Thread {
     public void run() {
         log.debug("New Client Connect! Connected IP : {}, Port : {}", connection.getInetAddress(),
                 connection.getPort());
-        log.debug("requestHeaderMap {} ", requestHeaderMap.size());
 
-        // 클라이언트가 전송하는 데이터는 InputStream을 통해 읽을 수 있다. 
-        // 서버는 outputStream을 통해 데이터를 전달할 수 있다.
         try (InputStream in = connection.getInputStream(); OutputStream out = connection.getOutputStream()) {
         	InputStreamReader isr = new InputStreamReader(in);
-        	//바이트 기반의 스트림을 문자 기반의 스트림으로 변환하는 스트림
         	BufferedReader reader = new BufferedReader(isr);
-        	//문자 기반의 보조 스트림
         	
         	mappingHttpHeaderTohashMap(reader);
         	if (requestHeaderMap.containsKey("Cookie")) {
-        		Map<String, String> cookieProperties = util.HttpRequestUtils.parseCookies(requestHeaderMap.get("Cookie"));
+        		Map<String, String> cookieProperties = HttpRequestUtils.parseCookies(requestHeaderMap.get("Cookie"));
         		
         		if (cookieProperties.containsKey("logined")) {
         			String loginProperty = cookieProperties.get("logined");
         			if (Boolean.parseBoolean(loginProperty)) {
-            			loginState = LOGIN.LOGINED.ordinal();
+            			loginState = LOGIN.LOGINED;
             		}
         		}
         	}
         	
         	DataOutputStream dos = new DataOutputStream(out);
-        	//자바의 8가지 기본 자료형의 단위로(boolean, byte, char, short, int, long, float, double)
-        	//읽고 쓸 수 있는 바이트 기반의 보조 스트림
         	byte[] body = {};
+        	statusCode = 200;
         	
 	        if (requestHeaderMap.containsKey("Uri") && requestHeaderMap.containsKey("Method")) {
 	        	String uri = requestHeaderMap.get("Uri");
 	        	String method = requestHeaderMap.get("Method");
 	        	
-	        	if (("/".equals(uri) || "/index.html".equals(uri)) && "GET".equals(method)) {
-	        		body = Files.readAllBytes(new File("./webapp/index.html").toPath());
-	        		
-	        		response200Header(dos, body.length);
-            		responseBody(dos, body);
-	        	} else if ("/user/create".equals(uri) && "POST".equals(method)) {
+	        		if ("/user/create".equals(uri) && "POST".equals(method)) {
 	        			String[] userParams = parseUserParams(reader);
 	        			String userId = "";
 	    				String password = "";
@@ -142,11 +139,11 @@ public class RequestHandler extends Thread {
 	    				
 						User user = new User(userId, password, name, email);
 						DataBase.addUser(user);
+						statusCode = 302;
 						log.debug("Create user information = " + user.toString());
 						
-						response302Header(dos);
-	            		responseBody(dos, body);
 	    			} else if("/user/login".equals(uri) && "POST".equals(method)) {
+	    				
 	    				String[] userParams = parseUserParams(reader);
 	        			String userId = "";
 	    				String password = "";
@@ -166,20 +163,23 @@ public class RequestHandler extends Thread {
 						}
 						
 						User user = DataBase.findUserById(userId);
+						statusCode = 302;
+						
+						String cookie = "";
 						if (user != null && password.equals(user.getPassword())) {
-							loginState = LOGIN.SUCCESS.ordinal();
+							loginState = LOGIN.SUCCESS;
+							cookie = "logined=true";
 							log.debug("Login success.");
-	    				  	response302HeaderWithCookie(dos, "logined=true");
-		            		responseBody(dos, body);
 						} else {
-							loginState = LOGIN.FAIL.ordinal();
+							loginState = LOGIN.FAIL;
+							cookie = "logined=false";
 							log.debug("Login failed.");
-							response302HeaderWithCookie(dos, "logined=false");
-		            		responseBody(dos, body);
 						}
 						
+						responseHeaderProperty.add(new Pair("Set-Cookie", cookie));
 	    			} else if("/user/list".equals(uri) && "GET".equals(method)) {
-	    				if (loginState == LOGIN.LOGINED.ordinal()) {
+	    				if (loginState == LOGIN.LOGINED) {
+	    					
 	    					StringBuilder userListHtml = new StringBuilder();
 	    					Collection<User> usrList = DataBase.findAll();
 	    					for (User user : usrList) {
@@ -187,72 +187,27 @@ public class RequestHandler extends Thread {
 	    						String email = user.getEmail();
 	    						userListHtml.append(name + " " + email + "\n");
 	    					}
+	    					
 	    					body = userListHtml.toString().getBytes();
-	    				  	response200Header(dos, body.length);
-		            		responseBody(dos, body);
 	    				} else {
+	    					statusCode = 302;
 	    				  	log.debug("Redirect to login.html ");
-	    				  	response302Header(dos);
-		            		responseBody(dos, body);
 	    				}
 	    			} else {
-	    				body = Files.readAllBytes(new File("./webapp" + uri).toPath());
-	            		response200Header(dos, body.length);
-	            		responseBody(dos, body);
+	    				body = Files.readAllBytes(new File("./webapp" + ("/".equals(uri) ? "/index.html" : uri)).toPath());
+	    				responseHeaderProperty.add(new Pair("Content-Type", uri.contains("css") ? "text/css" : "text/html"));
+	    				responseHeaderProperty.add(new Pair("Content-Length", String.valueOf(body.length)));
 	    			}
         	} else {
         		body = Files.readAllBytes(new File("./webapp/404.html").toPath());
-        		response200Header(dos, body.length);
-        		responseBody(dos, body);
+        		responseHeaderProperty.add(new Pair("Content-Type", "text/html"));
+				responseHeaderProperty.add(new Pair("Content-Length", String.valueOf(body.length)));
         	}
+	        
+	        ResponseHandler.response(dos, statusCode, responseHeaderProperty, body);
         } catch (IOException e) {
             log.error(e.getMessage());
         }
     }
 
-    private void response200Header(DataOutputStream dos, int lengthOfBodyContent) {
-    	 try {
-			 dos.writeBytes("HTTP/1.1 200 OK \r\n");
-			 String type = "text/html";
-             if (requestHeaderMap.containsKey("Uri")) {
-            	 String uri = requestHeaderMap.get("Uri");
-            	 if (uri.contains("css")) type = "text/css";
-             }
-             dos.writeBytes("Content-Type: " + type + "; charset=utf-8\r\n");
-             dos.writeBytes("Content-Length: " + lengthOfBodyContent + "\r\n");	 
-             dos.writeBytes("\r\n");	
-         } catch (IOException e) {
-             log.error(e.getMessage());
-         }
-    }
-    
-    private void response302Header(DataOutputStream dos) {
-   	    try {
-			dos.writeBytes("HTTP/1.1 302 Found \r\n");
-			dos.writeBytes("Location: http://localhost:8080/index.html\r\n");
-            dos.writeBytes("\r\n");
-        } catch (IOException e) {
-            log.error(e.getMessage());
-        }
-    }
-
-    private void response302HeaderWithCookie(DataOutputStream dos, String cookie) {
-   	    try {
-			dos.writeBytes("HTTP/1.1 302 Found \r\n");
-			dos.writeBytes("Location: http://localhost:8080/index.html\r\n");
-			dos.writeBytes("Set-Cookie: " + cookie +"; path=/ \r\n");
-            dos.writeBytes("\r\n");
-        } catch (IOException e) {
-            log.error(e.getMessage());
-        }
-    }
-
-    private void responseBody(DataOutputStream dos, byte[] body) {
-        try {
-            dos.write(body, 0, body.length);
-            dos.flush();
-        } catch (IOException e) {
-            log.error(e.getMessage());
-        }
-    }
 }
