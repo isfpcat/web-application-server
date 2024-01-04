@@ -13,8 +13,6 @@ import java.nio.file.Files;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,9 +29,6 @@ public class RequestHandler extends Thread {
     private HashMap<String, String> requestHeaderMap;
     private Socket connection;
     
-    private DataBase db;
-
-    private int statusCode = 200;
     private enum LOGIN {
     	INIT, SUCCESS, FAIL, LOGINED
     }
@@ -61,17 +56,18 @@ public class RequestHandler extends Thread {
     private void mappingHttpHeaderTohashMap(BufferedReader reader) {
     	String line = "";
     	try {
+    		line = reader.readLine();
+    		if(line == null) {
+    			return;
+    		}
+    		Uri uri = HttpRequestUtils.parseUri(line);
+			requestHeaderMap.put("Method", uri.getMethod());
+			requestHeaderMap.put("Uri", uri.getUri());
+			requestHeaderMap.put("Protocol", uri.getProtocol());
+    		
 			while(!"".equals((line = reader.readLine()))){
-				//문자 기반의 보조 스트림은 한 줄씩 읽어올 수 있는 메소드를 제공
-				if (!requestHeaderMap.containsKey("Method") && 
-						!requestHeaderMap.containsKey("Uri") && 
-							!requestHeaderMap.containsKey("Protocol")) {
-					Uri uri = HttpRequestUtils.parseUri(line);
-					requestHeaderMap.put("Method", uri.getMethod());
-					requestHeaderMap.put("Uri", uri.getUri());
-					requestHeaderMap.put("Protocol", uri.getProtocol());
-				} else {
-					Pair pair = HttpRequestUtils.parseHeader(line);
+				Pair pair = HttpRequestUtils.parseHeader(line);
+				if (pair != null) {
 					requestHeaderMap.put(pair.getKey(), pair.getValue());
 				}
 			}
@@ -83,7 +79,10 @@ public class RequestHandler extends Thread {
     public void run() {
         log.debug("New Client Connect! Connected IP : {}, Port : {}", connection.getInetAddress(),
                 connection.getPort());
+        log.debug("requestHeaderMap {} ", requestHeaderMap.size());
 
+        // 클라이언트가 전송하는 데이터는 InputStream을 통해 읽을 수 있다. 
+        // 서버는 outputStream을 통해 데이터를 전달할 수 있다.
         try (InputStream in = connection.getInputStream(); OutputStream out = connection.getOutputStream()) {
         	InputStreamReader isr = new InputStreamReader(in);
         	//바이트 기반의 스트림을 문자 기반의 스트림으로 변환하는 스트림
@@ -106,7 +105,6 @@ public class RequestHandler extends Thread {
         	//자바의 8가지 기본 자료형의 단위로(boolean, byte, char, short, int, long, float, double)
         	//읽고 쓸 수 있는 바이트 기반의 보조 스트림
         	byte[] body = {};
-        	statusCode = 200;
         	
 	        if (requestHeaderMap.containsKey("Uri") && requestHeaderMap.containsKey("Method")) {
 	        	String uri = requestHeaderMap.get("Uri");
@@ -114,6 +112,9 @@ public class RequestHandler extends Thread {
 	        	
 	        	if (("/".equals(uri) || "/index.html".equals(uri)) && "GET".equals(method)) {
 	        		body = Files.readAllBytes(new File("./webapp/index.html").toPath());
+	        		
+	        		response200Header(dos, body.length);
+            		responseBody(dos, body);
 	        	} else if ("/user/create".equals(uri) && "POST".equals(method)) {
 	        			String[] userParams = parseUserParams(reader);
 	        			String userId = "";
@@ -140,10 +141,11 @@ public class RequestHandler extends Thread {
 						}
 	    				
 						User user = new User(userId, password, name, email);
-						db.addUser(user);
-						statusCode = 302;
-						
+						DataBase.addUser(user);
 						log.debug("Create user information = " + user.toString());
+						
+						response302Header(dos);
+	            		responseBody(dos, body);
 	    			} else if("/user/login".equals(uri) && "POST".equals(method)) {
 	    				String[] userParams = parseUserParams(reader);
 	        			String userId = "";
@@ -163,65 +165,86 @@ public class RequestHandler extends Thread {
 							}
 						}
 						
-						User user = db.findUserById(userId);
-						if(user != null && password.equals(user.getPassword())) {
+						User user = DataBase.findUserById(userId);
+						if (user != null && password.equals(user.getPassword())) {
 							loginState = LOGIN.SUCCESS.ordinal();
 							log.debug("Login success.");
+	    				  	response302HeaderWithCookie(dos, "logined=true");
+		            		responseBody(dos, body);
 						} else {
 							loginState = LOGIN.FAIL.ordinal();
-							statusCode = 401;
 							log.debug("Login failed.");
+							response302HeaderWithCookie(dos, "logined=false");
+		            		responseBody(dos, body);
 						}
 						
 	    			} else if("/user/list".equals(uri) && "GET".equals(method)) {
 	    				if (loginState == LOGIN.LOGINED.ordinal()) {
 	    					StringBuilder userListHtml = new StringBuilder();
-	    					Collection<User> usrList = db.findAll();
+	    					Collection<User> usrList = DataBase.findAll();
 	    					for (User user : usrList) {
 	    						String name = user.getName();
 	    						String email = user.getEmail();
 	    						userListHtml.append(name + " " + email + "\n");
 	    					}
 	    					body = userListHtml.toString().getBytes();
+	    				  	response200Header(dos, body.length);
+		            		responseBody(dos, body);
 	    				} else {
-	    				  	statusCode = 302; 
 	    				  	log.debug("Redirect to login.html ");
+	    				  	response302Header(dos);
+		            		responseBody(dos, body);
 	    				}
 	    			} else {
 	    				body = Files.readAllBytes(new File("./webapp" + uri).toPath());
+	            		response200Header(dos, body.length);
+	            		responseBody(dos, body);
 	    			}
         	} else {
         		body = Files.readAllBytes(new File("./webapp/404.html").toPath());
+        		response200Header(dos, body.length);
+        		responseBody(dos, body);
         	}
-	        
-	        responseHeader(dos, statusCode, body.length, loginState);
-	        responseBody(dos, body);
-	        
-        	isr.close();
-        	reader.close();
         } catch (IOException e) {
             log.error(e.getMessage());
         }
     }
 
-    private void responseHeader(DataOutputStream dos, int statusCode, int lengthOfBodyContent, int loginState) {
+    private void response200Header(DataOutputStream dos, int lengthOfBodyContent) {
     	 try {
-             dos.writeBytes("HTTP/1.1 " + statusCode + "OK \r\n");
-             if (loginState == LOGIN.SUCCESS.ordinal() || loginState == LOGIN.FAIL.ordinal()) {
-            	 String loginResult = loginState == LOGIN.SUCCESS.ordinal() ? "true" : "false";
-            	 dos.writeBytes("Set-Cookie: logined=" + loginResult +"; path=/ \r\n");
-             }
-             String type = "text/html";
+			 dos.writeBytes("HTTP/1.1 200 OK \r\n");
+			 String type = "text/html";
              if (requestHeaderMap.containsKey("Uri")) {
             	 String uri = requestHeaderMap.get("Uri");
             	 if (uri.contains("css")) type = "text/css";
              }
-             dos.writeBytes("Content-Type: ;" + type + "charset=utf-8\r\n");
-             dos.writeBytes("Content-Length: " + lengthOfBodyContent + "\r\n");
-             dos.writeBytes("\r\n");
+             dos.writeBytes("Content-Type: " + type + "; charset=utf-8\r\n");
+             dos.writeBytes("Content-Length: " + lengthOfBodyContent + "\r\n");	 
+             dos.writeBytes("\r\n");	
          } catch (IOException e) {
              log.error(e.getMessage());
          }
+    }
+    
+    private void response302Header(DataOutputStream dos) {
+   	    try {
+			dos.writeBytes("HTTP/1.1 302 Found \r\n");
+			dos.writeBytes("Location: http://localhost:8080/index.html\r\n");
+            dos.writeBytes("\r\n");
+        } catch (IOException e) {
+            log.error(e.getMessage());
+        }
+    }
+
+    private void response302HeaderWithCookie(DataOutputStream dos, String cookie) {
+   	    try {
+			dos.writeBytes("HTTP/1.1 302 Found \r\n");
+			dos.writeBytes("Location: http://localhost:8080/index.html\r\n");
+			dos.writeBytes("Set-Cookie: " + cookie +"; path=/ \r\n");
+            dos.writeBytes("\r\n");
+        } catch (IOException e) {
+            log.error(e.getMessage());
+        }
     }
 
     private void responseBody(DataOutputStream dos, byte[] body) {
