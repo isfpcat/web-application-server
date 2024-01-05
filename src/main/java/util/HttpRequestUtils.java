@@ -25,7 +25,7 @@ public class HttpRequestUtils {
     public static Map<String, String> parseCookies(String cookies) {
         return parseValues(cookies, ";");
     }
-
+    
     private static Map<String, String> parseValues(String values, String separator) {
         if (Strings.isNullOrEmpty(values)) {
             return Maps.newHashMap();

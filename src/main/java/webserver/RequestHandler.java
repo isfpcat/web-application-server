@@ -13,6 +13,7 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 
 import org.slf4j.Logger;
@@ -43,9 +44,9 @@ public class RequestHandler extends Thread {
         this.responseHeaderProperty = new ArrayList<Pair>();
     }
     
-    private String[] parseUserParams(BufferedReader reader) {
+    private Map<String, String> parseUserParams(BufferedReader reader) {
     	String requestBody = "";
-		if(requestHeaderMap.containsKey("Content-Length")) {
+		if (requestHeaderMap.containsKey("Content-Length")) {
 			try {
 				requestBody = util.IOUtils.readData(reader, Integer.parseInt(requestHeaderMap.get("Content-Length")));
 			} catch (NumberFormatException e) {
@@ -54,14 +55,14 @@ public class RequestHandler extends Thread {
 				e.printStackTrace();
 			}
 		}
-		return requestBody.split("&");
+		return HttpRequestUtils.parseQueryString(requestBody);
     }
 
     private void mappingHttpHeaderTohashMap(BufferedReader reader) {
     	String line = "";
     	try {
     		line = reader.readLine();
-    		if(line == null) {
+    		if (line == null) {
     			return;
     		}
     		Uri uri = HttpRequestUtils.parseUri(line);
@@ -93,6 +94,7 @@ public class RequestHandler extends Thread {
         	BufferedReader reader = new BufferedReader(isr);
         	
         	mappingHttpHeaderTohashMap(reader);
+        	
         	if (requestHeaderMap.containsKey("Cookie")) {
         		Map<String, String> cookieProperties = HttpRequestUtils.parseCookies(requestHeaderMap.get("Cookie"));
         		
@@ -109,62 +111,50 @@ public class RequestHandler extends Thread {
         	statusCode = 200;
         	
 	        if (requestHeaderMap.containsKey("Uri") && requestHeaderMap.containsKey("Method")) {
-	        	String uri = requestHeaderMap.get("Uri");
-	        	String method = requestHeaderMap.get("Method");
-	        	
+		        	String uri = requestHeaderMap.get("Uri");
+		        	String method = requestHeaderMap.get("Method");
+
 	        		if ("/user/create".equals(uri) && "POST".equals(method)) {
-	        			String[] userParams = parseUserParams(reader);
+	        			Map<String, String> userParams = parseUserParams(reader);
 	        			String userId = "";
 	    				String password = "";
 	    				String name = "";
 	    				String email = "";
-	        				
-	    				for(String param : userParams) {
-	    					String[] property = param.split("=");
-							if(property.length == 2) {
-								String key = property[0];
-								String value = property[1];
-								
-								if("userId".equals(key)) {
-									userId = value;
-								} else if("password".equals(key)) {
-									password = value;
-								} else if("name".equals(key)) {
-									name = value;
-								} else if("email".equals(key)) {
-									email = URLDecoder.decode(value, "utf-8");
-								}
+	    				
+	    				for(String key : userParams.keySet()) {
+							String value = userParams.get(key);
+							
+							if("userId".equals(key)) {
+								userId = value;
+							} else if("password".equals(key)) {
+								password = value;
+							} else if("name".equals(key)) {
+								name = value;
+							} else if("email".equals(key)) {
+								email = URLDecoder.decode(value, "utf-8");
 							}
 						}
 	    				
 						User user = new User(userId, password, name, email);
 						DataBase.addUser(user);
 						statusCode = 302;
-						log.debug("Create user information = " + user.toString());
 						
+						log.debug("Create user information = " + user.toString());
 	    			} else if("/user/login".equals(uri) && "POST".equals(method)) {
-	    				
-	    				String[] userParams = parseUserParams(reader);
+	    				Map<String, String> userParams = parseUserParams(reader);
 	        			String userId = "";
 	    				String password = "";
 	    				
-						for(String param : userParams) {
-							String[] property = param.split("=");
-							if(property.length == 2) {
-								String key = property[0];
-								String value = property[1];
-								
-								if ("userId".equals(key)) {
-									userId = value;
-								} else if("password".equals(key)) {
-									password = value;
-								} 
-							}
+						for(String key : userParams.keySet()) {
+							String value = userParams.get(key);
+							if ("userId".equals(key)) {
+								userId = value;
+							} else if("password".equals(key)) {
+								password = value;
+							} 
 						}
 						
 						User user = DataBase.findUserById(userId);
-						statusCode = 302;
-						
 						String cookie = "";
 						if (user != null && password.equals(user.getPassword())) {
 							loginState = LOGIN.SUCCESS;
@@ -176,10 +166,11 @@ public class RequestHandler extends Thread {
 							log.debug("Login failed.");
 						}
 						
+						statusCode = 302;
 						responseHeaderProperty.add(new Pair("Set-Cookie", cookie));
+						
 	    			} else if("/user/list".equals(uri) && "GET".equals(method)) {
 	    				if (loginState == LOGIN.LOGINED) {
-	    					
 	    					StringBuilder userListHtml = new StringBuilder();
 	    					Collection<User> usrList = DataBase.findAll();
 	    					for (User user : usrList) {
@@ -195,14 +186,19 @@ public class RequestHandler extends Thread {
 	    				}
 	    			} else {
 	    				body = Files.readAllBytes(new File("./webapp" + ("/".equals(uri) ? "/index.html" : uri)).toPath());
-	    				responseHeaderProperty.add(new Pair("Content-Type", uri.contains("css") ? "text/css" : "text/html"));
-	    				responseHeaderProperty.add(new Pair("Content-Length", String.valueOf(body.length)));
 	    			}
         	} else {
         		body = Files.readAllBytes(new File("./webapp/404.html").toPath());
-        		responseHeaderProperty.add(new Pair("Content-Type", "text/html"));
-				responseHeaderProperty.add(new Pair("Content-Length", String.valueOf(body.length)));
         	}
+	        
+	        if (requestHeaderMap.containsKey("Accept")) {
+	        	String accept = requestHeaderMap.get("Accept").split(",")[0];
+	        	responseHeaderProperty.add(new Pair("Content-Type", accept));
+	        }
+	        
+	        if (body.length > 0) {
+	        	responseHeaderProperty.add(new Pair("Content-Length", String.valueOf(body.length)));
+	        }
 	        
 	        ResponseHandler.response(dos, statusCode, responseHeaderProperty, body);
         } catch (IOException e) {

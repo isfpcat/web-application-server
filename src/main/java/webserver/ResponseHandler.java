@@ -19,7 +19,7 @@ public class ResponseHandler extends Thread{
 				dos.writeBytes("HTTP/1.1 200 OK \r\n");
 			} else if (statusCode == 302) {
 				dos.writeBytes("HTTP/1.1 302 Found \r\n");
-				dos.writeBytes("Location: http://localhost:8080/index.html");
+				dos.writeBytes("Location: http://localhost:8080/index.html \r\n");
 			}
 			
 			for (Pair property : headerProperty) {
@@ -28,7 +28,7 @@ public class ResponseHandler extends Thread{
 			
 			dos.writeBytes("\r\n");	
 			
-			if(body.length > 0) {
+			if (body.length > 0) {
 				responseBody(dos, body);
 			}
 		} catch (IOException e) {
