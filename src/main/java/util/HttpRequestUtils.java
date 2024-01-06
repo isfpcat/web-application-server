@@ -25,6 +25,45 @@ public class HttpRequestUtils {
     public static Map<String, String> parseCookies(String cookies) {
         return parseValues(cookies, ";");
     }
+
+    /**
+     * @param header
+     *            값은 	field1: value1
+     *            		field2: value2 형식임
+     * @return
+     */
+    
+    public static Map<String, String> parseHeaders(String header) {
+        return parseValues(header, "\n", ": ");
+    }
+    
+    /**
+     * @param header
+     *            값은 	field1: value1형식임
+     * @return
+     */
+    
+    public static Pair parseHeader(String header) {
+        return getKeyValue(header, ": ");
+    }
+    
+    /**
+     * @param 쿠키
+     *            값은 GET /index.html HTTP/1.1 형식임
+     * @return
+     */
+    public static Uri parseUri(String uri) {
+        if (Strings.isNullOrEmpty(uri)) {
+            return null;
+        }
+
+        String[] tokens = uri.split(" ");
+        if (tokens.length != 3) {
+            return null;
+        }
+
+        return new Uri(tokens[0], tokens[1], tokens[2]);
+    }
     
     private static Map<String, String> parseValues(String values, String separator) {
         if (Strings.isNullOrEmpty(values)) {
@@ -33,6 +72,16 @@ public class HttpRequestUtils {
 
         String[] tokens = values.split(separator);
         return Arrays.stream(tokens).map(t -> getKeyValue(t, "=")).filter(p -> p != null)
+                .collect(Collectors.toMap(p -> p.getKey(), p -> p.getValue()));
+    }
+    
+    private static Map<String, String> parseValues(String values, String separator, String valueSeperator) {
+        if (Strings.isNullOrEmpty(values)) {
+            return Maps.newHashMap();
+        }
+
+        String[] tokens = values.split(separator);
+        return Arrays.stream(tokens).map(t -> getKeyValue(t, valueSeperator)).filter(p -> p != null)
                 .collect(Collectors.toMap(p -> p.getKey(), p -> p.getValue()));
     }
 
@@ -48,92 +97,5 @@ public class HttpRequestUtils {
 
         return new Pair(tokens[0], tokens[1]);
     }
-
-    public static Pair parseHeader(String header) {
-        return getKeyValue(header, ": ");
-    }
     
-    public static Uri parseUri(String uri) {
-        return getHttpUriProperties(uri, " ");
-    }
-
-    static Uri getHttpUriProperties(String uri, String regex) {
-        if (Strings.isNullOrEmpty(uri)) {
-            return null;
-        }
-
-        String[] tokens = uri.split(regex);
-        if (tokens.length != 3) {
-            return null;
-        }
-
-        return new Uri(tokens[0], tokens[1], tokens[2]);
-    }
-    
-    public static class Uri {
-        String method;
-        String uri;
-        String protocol;
-
-        Uri(String method, String uri, String protocol) {
-            this.method = method.trim();
-            this.uri = uri.trim();
-            this.protocol = protocol.trim();
-        }
-
-        public String getMethod() {
-            return method;
-        }
-
-        public String getUri() {
-            return uri;
-        }
-        
-        public String getProtocol() {
-            return protocol;
-        }
-
-		@Override
-		public int hashCode() {
-			final int prime = 31;
-			int result = 1;
-			result = prime * result + ((method == null) ? 0 : method.hashCode());
-			result = prime * result + ((protocol == null) ? 0 : protocol.hashCode());
-			result = prime * result + ((uri == null) ? 0 : uri.hashCode());
-			return result;
-		}
-
-		@Override
-		public boolean equals(Object obj) {
-			if (this == obj)
-				return true;
-			if (obj == null)
-				return false;
-			if (getClass() != obj.getClass())
-				return false;
-			Uri other = (Uri) obj;
-			if (method == null) {
-				if (other.method != null)
-					return false;
-			} else if (!method.equals(other.method))
-				return false;
-			if (protocol == null) {
-				if (other.protocol != null)
-					return false;
-			} else if (!protocol.equals(other.protocol))
-				return false;
-			if (uri == null) {
-				if (other.uri != null)
-					return false;
-			} else if (!uri.equals(other.uri))
-				return false;
-			return true;
-		}
-
-		@Override
-		public String toString() {
-			return "Uri [method=" + method + ", uri=" + uri + ", protocol=" + protocol + "]";
-		}
-    }
-
 }
