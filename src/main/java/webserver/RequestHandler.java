@@ -11,6 +11,7 @@ import java.net.Socket;
 import java.net.URLDecoder;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
@@ -23,6 +24,7 @@ import model.User;
 import util.HttpRequestUtils;
 import util.Pair;
 import util.Uri;
+import util.Util;
 
 public class RequestHandler extends Thread {
 	private static final Logger log = LoggerFactory.getLogger(RequestHandler.class);
@@ -135,11 +137,17 @@ public class RequestHandler extends Thread {
 							}
 						}
 	    				
-						User user = new User(userId, password, name, email);
-						DataBase.addUser(user);
-						statusCode = 302;
+	    				statusCode = 302;
+	    				
+	    				Collection<String> param = new ArrayList<String>(Arrays.asList(userId, password, name, email));
+	    				if (Util.isNullOrEmpty(param)) {
+	    					log.debug("Create user fail. Required userId, password, name, email");
+	    				} else {
+	    					User user = new User(userId, password, name, email);
+							DataBase.addUser(user);
+							log.debug("Create user information = " + user.toString());
+	    				}
 						
-						log.debug("Create user information = " + user.toString());
 	    			} else if("/user/login".equals(uri) && "POST".equals(method)) {
 	    				Map<String, String> userParams = parseUserParams(reader);
 	        			String userId = "";
@@ -153,21 +161,25 @@ public class RequestHandler extends Thread {
 								password = value;
 							} 
 						}
-						
-						User user = DataBase.findUserById(userId);
-						String cookie = "";
-						if (user != null && password.equals(user.getPassword())) {
-							loginState = LOGIN.SUCCESS;
-							cookie = "logined=true";
-							log.debug("Login success.");
-						} else {
-							loginState = LOGIN.FAIL;
-							cookie = "logined=false";
-							log.debug("Login failed.");
-						}
-						
 						statusCode = 302;
-						responseHeaderProperty.add(new Pair("Set-Cookie", cookie));
+						
+						Collection<String> param = new ArrayList<String>(Arrays.asList(userId, password));
+						if (Util.isNullOrEmpty(param)) {
+	    					log.debug("Login fail. Required userId, password");
+	    				} else {
+	    					User user = DataBase.findUserById(userId);
+							String cookie = "";
+							if (user != null && password.equals(user.getPassword())) {
+								loginState = LOGIN.SUCCESS;
+								cookie = "logined=true";
+								log.debug("Login success.");
+							} else {
+								loginState = LOGIN.FAIL;
+								cookie = "logined=false";
+								log.debug("Login failed.");
+							}
+							responseHeaderProperty.add(new Pair("Set-Cookie", cookie));
+	    				}
 						
 	    			} else if("/user/list".equals(uri) && "GET".equals(method)) {
 	    				if (loginState == LOGIN.LOGINED) {
