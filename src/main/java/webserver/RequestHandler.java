@@ -65,12 +65,12 @@ public class RequestHandler extends Thread {
         	byte[] body = {};
         	statusCode = 200;
         	
-        	String uri = request.getPath();
+        	String path = request.getPath();
         	String method = request.getMethod();
 
-	        if (Strings.isNullOrEmpty(uri) && Strings.isNullOrEmpty(method)) {
+	        if (!Strings.isNullOrEmpty(path) && !Strings.isNullOrEmpty(method)) {
 
-        		if ("/user/create".equals(uri) && "POST".equals(method)) {
+        		if ("/user/create".equals(path) && "POST".equals(method)) {
         			String userId = request.getParameter("userId");
     				String password = request.getParameter("password");
     				String name = request.getParameter("name");
@@ -86,7 +86,7 @@ public class RequestHandler extends Thread {
 						log.debug("Create user information = " + user.toString());
     				}
 					
-    			} else if("/user/login".equals(uri) && "POST".equals(method)) {
+    			} else if("/user/login".equals(path) && "POST".equals(method)) {
         			String userId = request.getParameter("userId");
     				String password = request.getParameter("password");
 					statusCode = 302;
@@ -109,7 +109,7 @@ public class RequestHandler extends Thread {
 						responseHeaderProperty.add(new Pair("Set-Cookie", cookie));
     				}
 					
-    			} else if("/user/list".equals(uri) && "GET".equals(method)) {
+    			} else if("/user/list".equals(path) && "GET".equals(method)) {
     				if (loginState == LOGIN.LOGINED) {
     					StringBuilder userListHtml = new StringBuilder();
     					Collection<User> usrList = DataBase.findAll();
@@ -125,13 +125,14 @@ public class RequestHandler extends Thread {
     				  	log.debug("Redirect to login.html ");
     				}
     			} else {
-    				body = Files.readAllBytes(new File("./webapp" + ("/".equals(uri) ? "/index.html" : uri)).toPath());
+    				path = "/".equals(path) ? "/index.html" : path;
+    				body = Files.readAllBytes(new File("./webapp" + path).toPath());
     			}
         	} else {
         		body = Files.readAllBytes(new File("./webapp/404.html").toPath());
         	}
 	        
-        	String accept = request.getHeader("Accept");
+        	String accept = request.getHeader("Accept").split(",")[0];
         	responseHeaderProperty.add(new Pair("Content-Type", accept));
 	        
 	        if (body.length > 0) {
