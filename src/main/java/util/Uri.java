@@ -3,21 +3,11 @@ package util;
 public class Uri {
 	  String method;
       String path;
-      String queryParams;
       String protocol;
 
-      Uri(String method, String uri, String protocol) {
+      Uri(String method, String path, String protocol) {
           this.method = method.trim();
-          if (uri.contains("?")) {
-        	  String[] tokens = uri.split("\\?");
-        	  if (tokens.length == 2) {
-        		  this.path = tokens[0];
-            	  this.queryParams = tokens[1];
-        	  }
-          } else {
-        	  this.path = uri.trim();
-          }
-          
+          this.path = path.trim();
           this.protocol = protocol.trim();
       }
 
@@ -27,10 +17,6 @@ public class Uri {
 
 	public String getPath() {
 		return path;
-	}
-
-	public String getQueryParams() {
-		return queryParams;
 	}
 
 	public String getProtocol() {
@@ -44,7 +30,6 @@ public class Uri {
 		result = prime * result + ((method == null) ? 0 : method.hashCode());
 		result = prime * result + ((path == null) ? 0 : path.hashCode());
 		result = prime * result + ((protocol == null) ? 0 : protocol.hashCode());
-		result = prime * result + ((queryParams == null) ? 0 : queryParams.hashCode());
 		return result;
 	}
 
@@ -72,17 +57,12 @@ public class Uri {
 				return false;
 		} else if (!protocol.equals(other.protocol))
 			return false;
-		if (queryParams == null) {
-			if (other.queryParams != null)
-				return false;
-		} else if (!queryParams.equals(other.queryParams))
-			return false;
 		return true;
 	}
 
 	@Override
 	public String toString() {
-		return "Uri [method=" + method + ", path=" + path + ", queryParams=" + queryParams + ", protocol=" + protocol
+		return "Uri [method=" + method + ", path=" + path + ", protocol=" + protocol
 				+ "]";
 	}
 }

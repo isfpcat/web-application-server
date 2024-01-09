@@ -17,12 +17,12 @@ public class HttpRequest {
 	
 	private String method;
 	private String path;
-	private String queryString;
+	
 	private Map<String, String> headerMaps;
 	private Map<String, String> userParams;
 	
 	public HttpRequest (BufferedReader in) {
-		this.reader = in;
+		reader = in;
 		
 		String line = "";
     	try {
@@ -31,28 +31,29 @@ public class HttpRequest {
     			return;
     		}
     		Uri uri = HttpRequestUtils.parseUri(line);
-			this.method = uri.getMethod();
-			this.path = uri.getPath();
+			method = uri.getMethod();
+			path = uri.getPath();
     		
 			String header = "";
 			while(!"".equals((line = reader.readLine()))){
 				if (line == null) break;
 				header += line+"\n";
 			}
+			headerMaps = HttpRequestUtils.parseHeaders(header);
 			
-			String body = "";
-			while(!"".equals((line = reader.readLine()))){
-				if (line == null) break;
-				body += line+"\n";
+			if ("POST".equals(method)) {
+				String body = "";
+				while (!"".equals((line = reader.readLine()))){
+					if (line == null) break;
+					body += line+"\n";
+				}
+				userParams = HttpRequestUtils.parseQueryString(body);
+			} if ("GET".equals(method) && 
+					uri.getPath().split("\\?").length == 2) {
+				String[] uriTokens = uri.getPath().split("\\?");
+				path = uriTokens[0];
+				userParams = HttpRequestUtils.parseQueryString(uriTokens[1]);
 			}
-			
-			this.queryString = uri.getQueryParams();
-			if (Strings.isNullOrEmpty(this.queryString)) {
-				this.queryString = body;
-			}
-			
-			this.headerMaps = HttpRequestUtils.parseHeaders(header);
-			this.userParams = HttpRequestUtils.parseQueryString(this.queryString);
 			
 		} catch (IOException e) {
 			e.printStackTrace();
@@ -60,18 +61,18 @@ public class HttpRequest {
     }
 	
 	public String getMethod() {
-		return this.method;
+		return method;
 	}
 	
 	public String getPath() {
-		return this.path;
+		return path;
 	}
 	
 	public String getHeader(String field) {
-		return this.headerMaps.get(field);
+		return headerMaps.get(field);
 	}
 	
 	public String getParameter(String field) {
-		return this.userParams.get(field);
+		return userParams.get(field);
 	}
 }
