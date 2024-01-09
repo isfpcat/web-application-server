@@ -7,6 +7,8 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.Reader;
+import java.io.StringReader;
 
 import org.junit.Test;
 
@@ -15,9 +17,12 @@ public class HttpRequestTest {
 
     @Test
     public void request_GET() throws Exception {
-    	InputStream in = new FileInputStream(new File(testDirectory + "Http_GET.txt"));
-    	InputStreamReader ir = new InputStreamReader(in);
-    	HttpRequest request = new HttpRequest(new BufferedReader(ir));
+    	String httpGetRequestMsg = "GET /user/create?userId=id&password=pwd&name=jy HTTP/1.1\n" + 
+        		"Host: localhost:8080\n" + 
+        		"Connection: keep-alive\n" + 
+        		"Accept: */*\n";
+    	StringReader sr = new StringReader(httpGetRequestMsg);
+    	HttpRequest request = new HttpRequest(new BufferedReader(sr));
     	
     	assertEquals("GET", request.getMethod());
     	assertEquals("/user/create", request.getPath());
@@ -27,9 +32,17 @@ public class HttpRequestTest {
     
     @Test
     public void request_POST() throws Exception {
-    	InputStream in = new FileInputStream(new File(testDirectory + "Http_POST.txt"));
-    	InputStreamReader ir = new InputStreamReader(in);
-    	HttpRequest request = new HttpRequest(new BufferedReader(ir));
+    	String httpPostRequestMsg = "POST /user/create HTTP/1.1\n" + 
+        		"Host: localhost:8080\n" + 
+        		"Connection: keep-alive\n" + 
+        		"Content-Length: 30\n" + 
+        		"Content-Type: application/x-www-form-urlencoded\n" + 
+        		"Accept: */*\n" + 
+        		"\n" + 
+        		"userId=id&password=pwd&name=jy";
+        
+    	StringReader sr = new StringReader(httpPostRequestMsg);
+    	HttpRequest request = new HttpRequest(new BufferedReader(sr));
     	
     	assertEquals("POST", request.getMethod());
     	assertEquals("/user/create", request.getPath());
