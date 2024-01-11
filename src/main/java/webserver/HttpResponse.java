@@ -1,7 +1,11 @@
 package webserver;
 
 import java.io.DataOutputStream;
+import java.io.File;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.Collection;
 
 import org.slf4j.Logger;
@@ -12,10 +16,31 @@ import util.Pair;
 
 public class HttpResponse {
 	private static final Logger log = LoggerFactory.getLogger(HttpResponse.class);
+	private DataOutputStream dos = null;
+	private Collection<Pair> headerMap;
 	
-	public void writeHeader(DataOutputStream dos, Collection<Pair> headerProperty) {
+	public HttpResponse(OutputStream out) {
+		this.dos = new DataOutputStream(out);
+		this.headerMap = new ArrayList<Pair>();
+	}
+	
+	public void addHeaderProperty(Pair property) {
+		headerMap.add(property);
+	}
+	
+	public void redirect(String uri) {
 		try {
-			for (Pair property : headerProperty) {
+			dos.writeBytes("HTTP/1.1 302 Found \r\n");
+			dos.writeBytes("Location: http://localhost:8080/" + uri + "\r\n");
+			writeHeader();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+	
+	public void writeHeader() {
+		try {
+			for (Pair property : headerMap) {
 				dos.writeBytes(property.getKey()+": " + property.getValue() + "\r\n");
 			}
 		} catch (IOException e) {
@@ -23,30 +48,40 @@ public class HttpResponse {
 		}
 	}
 	
-	public void response(DataOutputStream dos, int statusCode, Collection<Pair> headerProperty, byte[] body) {
+	public void forward(String uri) {
 		try {
-			if (statusCode == 200) {
-				dos.writeBytes("HTTP/1.1 200 OK \r\n");
-			} else if (statusCode == 302) {
-				dos.writeBytes("HTTP/1.1 302 Found \r\n");
-				dos.writeBytes("Location: http://localhost:8080/index.html \r\n");
+			byte[] body = Files.readAllBytes(new File(uri).toPath());
+			
+			dos.writeBytes("HTTP/1.1 200 OK \r\n");
+			
+			if (uri.endsWith("html")) {
+				headerMap.add(new Pair("Content-Type", "text/html"));
+			} else if (uri.endsWith("css")) {
+				headerMap.add(new Pair("Content-Type", "text/css"));
+			} else {
+				headerMap.add(new Pair("Content-Type", "*/*"));
 			}
+			headerMap.add(new Pair("Content-Length", String.valueOf(body.length)));
+			writeHeader();
 			
-			writeHeader(dos, headerProperty);
-			dos.writeBytes("\r\n");	
-			
-			responseBody(dos, body);
+			dos.writeBytes("\r\n");
+			dos.write(body, 0, body.length);
+			dos.flush();
 		} catch (IOException e) {
 			log.error(e.getMessage());
 		}
 	}
 
-    public void responseBody(DataOutputStream dos, byte[] body) {
+    public void forwardWithBody(byte[] body) {
         try {
-        	if (body.length > 0) {
-	            dos.write(body, 0, body.length);
-	            dos.flush();
-        	}
+        	dos.writeBytes("HTTP/1.1 200 OK \r\n");
+        	headerMap.add(new Pair("Content-Type", "text/html"));
+        	headerMap.add(new Pair("Content-Length", String.valueOf(body.length)));
+        	writeHeader();
+        	dos.writeBytes("\r\n");
+        	
+            dos.write(body, 0, body.length);
+            dos.flush();
         } catch (IOException e) {
             log.error(e.getMessage());
         }
