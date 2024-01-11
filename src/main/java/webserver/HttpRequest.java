@@ -10,6 +10,7 @@ import java.util.Map;
 import com.google.common.base.Strings;
 
 import util.HttpRequestUtils;
+import util.IOUtils;
 import util.Uri;
 
 public class HttpRequest {
@@ -42,12 +43,11 @@ public class HttpRequest {
 			headerMaps = HttpRequestUtils.parseHeaders(header);
 			
 			if ("POST".equals(method)) {
-				String body = "";
-				while (!"".equals((line = reader.readLine()))){
-					if (line == null) break;
-					body += line+"\n";
+				String length = headerMaps.get("Content-Length");
+				if(!Strings.isNullOrEmpty(length)) {
+					String body = IOUtils.readData(reader, Integer.parseInt(length));
+					userParams = HttpRequestUtils.parseQueryString(body);
 				}
-				userParams = HttpRequestUtils.parseQueryString(body);
 			} if ("GET".equals(method) && 
 					uri.getPath().split("\\?").length == 2) {
 				String[] uriTokens = uri.getPath().split("\\?");
