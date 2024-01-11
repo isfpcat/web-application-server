@@ -32,17 +32,15 @@ public class RequestHandler extends Thread {
 	private static final Logger log = LoggerFactory.getLogger(RequestHandler.class);
     
     private Socket connection;
-    private int statusCode;
     
     private enum LOGIN {
     	INIT, SUCCESS, FAIL, LOGINED
     }
     private LOGIN loginState = LOGIN.INIT;
-    private Collection<Pair> responseHeaderProperty;
+    
     
     public RequestHandler (Socket connectionSocket) {
         this.connection = connectionSocket;
-        this.responseHeaderProperty = new ArrayList<Pair>();
     }
     
     public void run() {
@@ -54,20 +52,16 @@ public class RequestHandler extends Thread {
         	BufferedReader reader = new BufferedReader(isr);
         	
         	HttpRequest request = new HttpRequest(reader);
+        	HttpResponse response = new HttpResponse(out);
         	
     		Map<String, String> cookieProperties = HttpRequestUtils.parseCookies(request.getHeader("Cookie"));
 			String logined = cookieProperties.get("logined");
 			if (!Strings.isNullOrEmpty(logined) && Boolean.parseBoolean(logined)) {
     			loginState = LOGIN.LOGINED;
     		}
-        	
-        	DataOutputStream dos = new DataOutputStream(out);
-        	byte[] body = {};
-        	statusCode = 200;
-        	
-        	String path = request.getPath();
-        	String method = request.getMethod();
 
+			String path = request.getPath();
+        	String method = request.getMethod();
 	        if (!Strings.isNullOrEmpty(path) && !Strings.isNullOrEmpty(method)) {
 
         		if ("/user/create".equals(path) && "POST".equals(method)) {
@@ -75,7 +69,6 @@ public class RequestHandler extends Thread {
     				String password = request.getParameter("password");
     				String name = request.getParameter("name");
     				String email = URLDecoder.decode(request.getParameter("email"), "utf-8");
-    				statusCode = 302;
     				
     				Collection<String> param = new ArrayList<String>(Arrays.asList(userId, password, name, email));
     				if (Util.isNullOrEmpty(param)) {
@@ -85,11 +78,10 @@ public class RequestHandler extends Thread {
 						DataBase.addUser(user);
 						log.debug("Create user information = " + user.toString());
     				}
-					
+    				response.redirect("index.html");
     			} else if("/user/login".equals(path) && "POST".equals(method)) {
         			String userId = request.getParameter("userId");
     				String password = request.getParameter("password");
-					statusCode = 302;
 					
 					Collection<String> param = new ArrayList<String>(Arrays.asList(userId, password));
 					if (Util.isNullOrEmpty(param)) {
@@ -106,9 +98,9 @@ public class RequestHandler extends Thread {
 							cookie = "logined=false";
 							log.debug("Login failed.");
 						}
-						responseHeaderProperty.add(new Pair("Set-Cookie", cookie));
+						response.addHeaderProperty(new Pair("Set-Cookie", cookie));
     				}
-					
+					response.redirect("index.html");
     			} else if("/user/list".equals(path) && "GET".equals(method)) {
     				if (loginState == LOGIN.LOGINED) {
     					StringBuilder userListHtml = new StringBuilder();
@@ -118,28 +110,20 @@ public class RequestHandler extends Thread {
     						String email = user.getEmail();
     						userListHtml.append(name + " " + email + "\n");
     					}
-    					
-    					body = userListHtml.toString().getBytes();
+    					response.forwardWithBody(userListHtml.toString().getBytes());
     				} else {
-    					statusCode = 302;
+    					response.redirect("index.html");
     				  	log.debug("Redirect to login.html ");
     				}
     			} else {
     				path = "/".equals(path) ? "/index.html" : path;
-    				body = Files.readAllBytes(new File("./webapp" + path).toPath());
+    				response.forward(path);
     			}
         	} else {
-        		body = Files.readAllBytes(new File("./webapp/404.html").toPath());
+        		path = "404.html";
+        		response.forward(path);
         	}
         	
-	        if (body.length > 0) {
-	        	String accept = request.getHeader("Accept").split(",")[0];
-	        	responseHeaderProperty.add(new Pair("Content-Type", accept));
-	        	responseHeaderProperty.add(new Pair("Content-Length", String.valueOf(body.length)));
-	        }
-	        
-	        HttpResponse response = new HttpResponse();
-	        response.response(dos, statusCode, responseHeaderProperty, body);
         } catch (IOException e) {
             log.error(e.getMessage());
         }
