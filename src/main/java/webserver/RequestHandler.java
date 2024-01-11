@@ -131,15 +131,15 @@ public class RequestHandler extends Thread {
         	} else {
         		body = Files.readAllBytes(new File("./webapp/404.html").toPath());
         	}
-	        
-        	String accept = request.getHeader("Accept").split(",")[0];
-        	responseHeaderProperty.add(new Pair("Content-Type", accept));
-	        
+        	
 	        if (body.length > 0) {
+	        	String accept = request.getHeader("Accept").split(",")[0];
+	        	responseHeaderProperty.add(new Pair("Content-Type", accept));
 	        	responseHeaderProperty.add(new Pair("Content-Length", String.valueOf(body.length)));
 	        }
 	        
-	        ResponseHandler.response(dos, statusCode, responseHeaderProperty, body);
+	        HttpResponse response = new HttpResponse();
+	        response.response(dos, statusCode, responseHeaderProperty, body);
         } catch (IOException e) {
             log.error(e.getMessage());
         }

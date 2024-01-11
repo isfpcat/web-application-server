@@ -10,10 +10,20 @@ import org.slf4j.LoggerFactory;
 import util.Pair;
 
 
-public class ResponseHandler extends Thread{
-	private static final Logger log = LoggerFactory.getLogger(ResponseHandler.class);
+public class HttpResponse {
+	private static final Logger log = LoggerFactory.getLogger(HttpResponse.class);
 	
-	static void response(DataOutputStream dos, int statusCode, Collection<Pair> headerProperty, byte[] body) {
+	public void writeHeader(DataOutputStream dos, Collection<Pair> headerProperty) {
+		try {
+			for (Pair property : headerProperty) {
+				dos.writeBytes(property.getKey()+": " + property.getValue() + "\r\n");
+			}
+		} catch (IOException e) {
+			log.error(e.getMessage());
+		}
+	}
+	
+	public void response(DataOutputStream dos, int statusCode, Collection<Pair> headerProperty, byte[] body) {
 		try {
 			if (statusCode == 200) {
 				dos.writeBytes("HTTP/1.1 200 OK \r\n");
@@ -22,24 +32,21 @@ public class ResponseHandler extends Thread{
 				dos.writeBytes("Location: http://localhost:8080/index.html \r\n");
 			}
 			
-			for (Pair property : headerProperty) {
-				dos.writeBytes(property.getKey()+": " + property.getValue() + "\r\n");
-			}
-			
+			writeHeader(dos, headerProperty);
 			dos.writeBytes("\r\n");	
 			
-			if (body.length > 0) {
-				responseBody(dos, body);
-			}
+			responseBody(dos, body);
 		} catch (IOException e) {
 			log.error(e.getMessage());
 		}
 	}
 
-    static private void responseBody(DataOutputStream dos, byte[] body) {
+    public void responseBody(DataOutputStream dos, byte[] body) {
         try {
-            dos.write(body, 0, body.length);
-            dos.flush();
+        	if (body.length > 0) {
+	            dos.write(body, 0, body.length);
+	            dos.flush();
+        	}
         } catch (IOException e) {
             log.error(e.getMessage());
         }

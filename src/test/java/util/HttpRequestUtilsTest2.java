@@ -47,7 +47,7 @@ public class HttpRequestUtilsTest2 {
     	Uri result = HttpRequestUtils.parseUri(request);
     	
     	assertTrue(method.equals(result.getMethod()));
-    	assertTrue(uri.equals(result.getUri()));
+    	assertTrue(uri.equals(result.getPath()));
     	assertTrue(protocol.equals(result.getProtocol()));
     }
 	
