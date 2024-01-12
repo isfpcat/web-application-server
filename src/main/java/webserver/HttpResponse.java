@@ -50,7 +50,7 @@ public class HttpResponse {
 	
 	public void forward(String uri) {
 		try {
-			byte[] body = Files.readAllBytes(new File(uri).toPath());
+			byte[] body = Files.readAllBytes(new File("./webapp/" + uri).toPath());
 			
 			dos.writeBytes("HTTP/1.1 200 OK \r\n");
 			
